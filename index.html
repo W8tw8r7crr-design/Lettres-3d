@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lettres 3D</title>
+<style>
+  :root {
+    --rx: -12deg;
+    --ry: 24deg;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    background: radial-gradient(circle at 30% 20%, #2b2f4a, #0d0f1c 70%);
+    color: #e8eaf6;
+    font-family: system-ui, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+  h1 { letter-spacing: .12em; font-size: 15px; opacity: .6; text-transform: uppercase; }
+
+  .scene {
+    perspective: 1100px;
+    cursor: grab;
+    touch-action: none;
+  }
+  .scene:active { cursor: grabbing; }
+
+  .word {
+    display: inline-flex;
+    align-items: baseline;
+    transform-style: preserve-3d;
+    transform: rotateX(var(--rx)) rotateY(var(--ry));
+    font-family: 'Arial Black', 'Archivo Black', system-ui, sans-serif;
+    font-weight: 900;
+    line-height: 1;
+  }
+  .letter {
+    position: relative;
+    transform-style: preserve-3d;
+    color: var(--c, #ff5470);
+  }
+  .spacer { display: inline-block; width: .35em; }
+  .layer {
+    position: absolute;
+    inset: 0;
+    transform: translateZ(calc(var(--z) * -1px));
+    color: color-mix(in srgb, var(--c, #ff5470), #000 calc(var(--shade) * 1%));
+    pointer-events: none;
+  }
+  .layer.front { position: relative; inset: auto; transform: translateZ(1px); }
+
+  .panel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 14px;
+    padding: 12px 18px;
+    backdrop-filter: blur(8px);
+    max-width: 90vw;
+  }
+  .panel label { display: flex; align-items: center; gap: 7px; font-size: 13px; opacity: .9; }
+  .panel input[type="range"] { accent-color: #ff5470; width: 90px; }
+  .panel input[type="color"] { width: 30px; height: 26px; border: none; background: none; cursor: pointer; }
+  .panel input[type="text"] {
+    background: rgba(0,0,0,.3);
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 8px;
+    color: inherit;
+    padding: 7px 12px;
+    font-size: 14px;
+    width: 170px;
+    text-align: center;
+    letter-spacing: .08em;
+  }
+  .panel input[type="text"]:focus { outline: 1px solid #ff5470; }
+  .panel input[type="checkbox"] { accent-color: #ff5470; }
+  footer { font-size: 12px; opacity: .45; }
+</style>
+</head>
+<body>
+  <h1>Lettres 3D</h1>
+
+  <div class="scene" id="scene">
+    <div class="word" id="word"></div>
+  </div>
+
+  <div class="panel">
+    <input type="text" id="textInput" value="HELLO" maxlength="14" aria-label="Texte">
+    <label>Épaisseur <input type="range" id="depth" min="2" max="18" value="10"></label>
+    <label>Taille <input type="range" id="size" min="40" max="180" value="100"></label>
+    <label>Vitesse <input type="range" id="speed" min="0" max="80" value="18"></label>
+    <label><input type="checkbox" id="auto" checked> Rotation</label>
+    <label><input type="checkbox" id="rainbow"> Arc-en-ciel</label>
+    <input type="color" id="color" value="#ff5470" aria-label="Couleur">
+  </div>
+
+  <footer>Glissez la scène pour faire tourner les lettres</footer>
+
+<script>
+  const scene    = document.getElementById('scene');
+  const word     = document.getElementById('word');
+  const textIn   = document.getElementById('textInput');
+  const depthIn  = document.getElementById('depth');
+  const sizeIn   = document.getElementById('size');
+  const speedIn  = document.getElementById('speed');
+  const autoIn   = document.getElementById('auto');
+  const rainbowIn= document.getElementById('rainbow');
+  const colorIn  = document.getElementById('color');
+
+  let rx = -12, ry = 24;
+
+  function build() {
+    word.innerHTML = '';
+    const text = (textIn.value.trim() || 'HELLO').toUpperCase();
+    const depth = +depthIn.value;
+    word.style.fontSize = sizeIn.value + 'px';
+
+    [...text].forEach((ch, i) => {
+      if (ch === ' ') {
+        const sp = document.createElement('span');
+        sp.className = 'spacer';
+        word.appendChild(sp);
+        return;
+      }
+      const hue = (i * 40) % 360;
+      const letter = document.createElement('span');
+      letter.className = 'letter';
+      letter.style.setProperty('--c', rainbowIn.checked
+        ? `hsl(${hue} 85% 60%)`
+        : colorIn.value);
+
+      for (let z = depth; z >= 0; z--) {
+        const layer = document.createElement('span');
+        layer.className = 'layer' + (z === depth ? ' front' : '');
+        layer.textContent = ch;
+        layer.style.setProperty('--z', depth - z);
+        layer.style.setProperty('--shade', z === depth ? 0 : Math.round((1 - z / depth) * 62));
+        letter.appendChild(layer);
+      }
+      letter.style.margin = '0 .04em';
+      word.appendChild(letter);
+    });
+  }
+
+  function frame(t) {
+    const last = frame.last || t;
+    frame.last = t;
+    if (autoIn.checked && !dragging) {
+      ry = (ry + (+speedIn.value) * (t - last) / 1000) % 360;
+    }
+    scene.style.setProperty('--rx', rx + 'deg');
+    scene.style.setProperty('--ry', ry + 'deg');
+    requestAnimationFrame(frame);
+  }
+
+  let dragging = false, px = 0, py = 0;
+  scene.addEventListener('pointerdown', e => {
+    dragging = true; px = e.clientX; py = e.clientY;
+    scene.setPointerCapture(e.pointerId);
+  });
+  scene.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    ry += (e.clientX - px) * 0.5;
+    rx = Math.max(-85, Math.min(85, rx - (e.clientY - py) * 0.5));
+    px = e.clientX; py = e.clientY;
+  });
+  scene.addEventListener('pointerup', () => dragging = false);
+  scene.addEventListener('pointercancel', () => dragging = false);
+
+  [textIn, depthIn, sizeIn, rainbowIn, colorIn].forEach(el => el.addEventListener('input', build));
+  build();
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>
